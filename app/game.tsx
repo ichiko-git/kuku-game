@@ -105,12 +105,17 @@ export default function GameScreen() {
   const [questions] = useState<Question[]>(() => generateQuestions(dan, totalQ));
   const [currentIdx, setCurrentIdx] = useState(0);
   const [inputDigits, setInputDigits] = useState<number[]>([]);
+  // feedback: 表示中かどうか（null=非表示）
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
+  // feedbackType: 最後に表示したフィードバックの種別（フェードアウト中も保持）
+  const [feedbackType, setFeedbackType] = useState<"correct" | "wrong">("correct");
   const [records, setRecords] = useState<QuestionRecord[]>([]);
   const [timeLeft, setTimeLeft] = useState(CHALLENGE_TIME);
   const [isFinished, setIsFinished] = useState(false);
   // 二重送信防止フラグ（feedbackとは別に管理）
   const isSubmittingRef = useRef(false);
+  // フィードバック種別をrefで保持（フェードアウト中も正しい値を保つ）
+  const feedbackTypeRef = useRef<"correct" | "wrong">("correct");
 
   // Animation values（揺れなし：フィードバックのみ）
   const feedbackOpacity = useSharedValue(0);
@@ -213,11 +218,16 @@ export default function GameScreen() {
 
     const isCorrect = answer === currentQuestion.answer;
 
+    // feedbackTypeを先に確定（フェードアウト中も種別が変わらない）
+    const feedbackKind: "correct" | "wrong" = isCorrect ? "correct" : "wrong";
+    feedbackTypeRef.current = feedbackKind;
+    setFeedbackType(feedbackKind);
+
     // フィードバックアニメーション（揺れなし）
     feedbackOpacity.value = withTiming(1, { duration: 150 });
     feedbackScale.value = withSpring(1, { damping: 8 });
 
-    setFeedback(isCorrect ? "correct" : "wrong");
+    setFeedback(feedbackKind);
 
     // 効果音とハプティクス
     if (isCorrect) {
@@ -319,9 +329,9 @@ export default function GameScreen() {
         {/* Feedback overlay */}
         <Animated.View style={[styles.feedbackOverlay, feedbackAnimStyle]}>
           <Text style={styles.feedbackEmoji}>
-            {feedback === "correct" ? "⭕" : "❌"}
+            {feedbackType === "correct" ? "⭕" : "❌"}
           </Text>
-          {feedback === "wrong" && (
+          {feedbackType === "wrong" && (
             <Text style={[styles.correctAnswerText, { color: colors.foreground }]}>
               こたえ: {currentQuestion.answer}
             </Text>
