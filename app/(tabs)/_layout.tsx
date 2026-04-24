@@ -10,7 +10,8 @@ export default function TabLayout() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
-  const tabBarHeight = 56 + bottomPadding;
+  // アイコン(28) + ラベル(13) + paddingTop(8) + paddingBottom + 余白を十分に確保
+  const tabBarHeight = 72 + bottomPadding;
 
   return (
     <Tabs
@@ -19,7 +20,7 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          paddingTop: 8,
+          paddingTop: 6,
           paddingBottom: bottomPadding,
           height: tabBarHeight,
           backgroundColor: colors.surface,
@@ -29,6 +30,11 @@ export default function TabLayout() {
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "600",
+          marginTop: 2,
+          marginBottom: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 2,
         },
       }}
     >
