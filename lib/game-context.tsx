@@ -145,10 +145,14 @@ export function generateQuestions(dan: number, count: number = 10): { a: number;
     }
     return questions;
   }
-  // Specific dan: shuffle 1-9
-  const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-  const shuffled = nums.sort(() => Math.random() - 0.5).slice(0, count);
-  return shuffled.map((b) => ({ a: dan, b, answer: dan * b }));
+  // Specific dan: 1〜9をシャッフルし、countが9を超える場合は繰り返して追加
+  const base = [1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
+  const questions: { a: number; b: number; answer: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const b = base[i % base.length];
+    questions.push({ a: dan, b, answer: dan * b });
+  }
+  return questions;
 }
 
 // Helper: calculate stars from score
