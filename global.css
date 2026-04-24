@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 画面遷移中の白画面フラッシュを防ぐため、ルート要素の背景色を固定する */
+html, body, #root {
+  background-color: #FFF9F0;
+}

@@ -271,7 +271,13 @@ export default function GameScreen() {
     width: `${progressWidth.value}%`,
   }));
 
-  if (!currentQuestion) return null;
+  if (!currentQuestion) {
+    return (
+      <ScreenContainer containerClassName="bg-background">
+        <View style={{ flex: 1, backgroundColor: '#FFF9F0' }} />
+      </ScreenContainer>
+    );
+  }
 
   const timerColor = timeLeft <= 10 ? colors.error : timeLeft <= 20 ? colors.warning : colors.success;
 

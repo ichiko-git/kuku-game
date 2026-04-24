@@ -63,9 +63,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
   console.log(value, themeVariables)
 
+  const bgColor = SchemeColors[colorScheme].background;
+
   return (
     <ThemeContext.Provider value={value}>
-      <View style={[{ flex: 1 }, themeVariables]}>{children}</View>
+      <View style={[{ flex: 1, backgroundColor: bgColor }, themeVariables]}>{children}</View>
     </ThemeContext.Provider>
   );
 }

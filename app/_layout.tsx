@@ -8,6 +8,7 @@ import "react-native-reanimated";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
+import * as SystemUI from "expo-system-ui";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -37,6 +38,10 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
+    // 画面遷移中の白画面フラッシュを防ぐため、AndroidのWindow背景色を設定
+    if (Platform.OS !== "web") {
+      SystemUI.setBackgroundColorAsync("#FFF9F0").catch(() => {});
+    }
   }, []);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
@@ -93,6 +98,7 @@ export default function RootLayout() {
                 // 画面遷移中の白画面フラッシュを防ぐため、コンテンツ背景色を指定する
                 contentStyle: { backgroundColor: '#FFF9F0' },
                 animation: "fade",
+                animationDuration: 150,
               }}
             >
               <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
