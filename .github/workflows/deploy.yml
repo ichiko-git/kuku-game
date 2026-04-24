@@ -32,9 +32,13 @@ jobs:
         with:
           run_install: false
 
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate NativeWind CSS cache
+        run: |
+          mkdir -p node_modules/react-native-css-interop/.cache
+          npx tailwindcss -i ./global.css -o node_modules/react-native-css-interop/.cache/web.css --minify
 
       - name: Build Expo Web (static)
         run: npx expo export --platform web --output-dir dist
