@@ -108,6 +108,8 @@ export default function GameScreen() {
   const isSubmittingRef = useRef(false);
   const isNavigatingRef = useRef(false);
   const timeLeftRef = useRef(CHALLENGE_TIME);
+  // Web対応：isSubmittingをstateでも管理してUIに反映
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Animation values
   const feedbackOpacity = useSharedValue(0);
@@ -181,7 +183,7 @@ export default function GameScreen() {
   const inputValue = inputDigits.length === 0 ? "" : inputDigits.join("");
 
   const handleNumberPress = (num: number) => {
-    if (isSubmittingRef.current) return;
+    if (isSubmittingRef.current || isSubmitting) return;
     playTap();
 
     const newDigits = [...inputDigits, num];
@@ -198,14 +200,15 @@ export default function GameScreen() {
   };
 
   const handleDelete = () => {
-    if (isSubmittingRef.current) return;
+    if (isSubmittingRef.current || isSubmitting) return;
     playTap();
     setInputDigits((prev) => prev.slice(0, -1));
   };
 
   const submitAnswer = (answer: number, q: Question) => {
-    if (isSubmittingRef.current) return;
+    if (isSubmittingRef.current || isSubmitting) return;
     isSubmittingRef.current = true;
+    setIsSubmitting(true);
 
     const isCorrect = answer === q.answer;
 
@@ -250,6 +253,7 @@ export default function GameScreen() {
       setFeedback(null);
       setInputDigits([]);
       isSubmittingRef.current = false;
+      setIsSubmitting(false);
 
       const nextIdx = currentIdxRef.current + 1;
       if (nextIdx >= totalQ) {
@@ -342,7 +346,7 @@ export default function GameScreen() {
             key={num}
             num={num}
             onPress={() => handleNumberPress(num)}
-            disabled={isSubmittingRef.current}
+            disabled={isSubmitting}
           />
         ))}
         <View style={styles.numBtnWrapper}>
@@ -356,11 +360,11 @@ export default function GameScreen() {
         <NumberButton
           num={0}
           onPress={() => handleNumberPress(0)}
-          disabled={isSubmittingRef.current}
+          disabled={isSubmitting}
         />
         <Pressable
           onPress={() => {
-            if (inputDigits.length > 0 && !isSubmittingRef.current) {
+            if (inputDigits.length > 0 && !isSubmittingRef.current && !isSubmitting) {
               const q = questions[currentIdxRef.current];
               if (q) {
                 playTap();
@@ -372,7 +376,7 @@ export default function GameScreen() {
             styles.numBtnWrapper,
             styles.numButton,
             styles.enterButton,
-            { opacity: inputDigits.length === 0 || isSubmittingRef.current ? 0.4 : pressed ? 0.8 : 1 },
+            { opacity: inputDigits.length === 0 || isSubmitting ? 0.4 : pressed ? 0.8 : 1 },
           ]}
         >
           <Text style={styles.enterButtonText}>OK</Text>
