@@ -8,8 +8,8 @@ import Animated, {
   withSpring,
   withTiming,
   withSequence,
-  runOnJS,
 } from "react-native-reanimated";
+import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -20,6 +20,42 @@ const CHALLENGE_QUESTIONS = 20;
 const CHALLENGE_TIME = 60; // seconds
 
 type Question = { a: number; b: number; answer: number };
+
+// 効果音プレイヤーフック
+function useSoundEffects() {
+  const tapPlayer = useAudioPlayer(require("@/assets/sounds/tap.mp3"));
+  const correctPlayer = useAudioPlayer(require("@/assets/sounds/correct.mp3"));
+  const wrongPlayer = useAudioPlayer(require("@/assets/sounds/wrong.mp3"));
+
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    }
+  }, []);
+
+  const playTap = useCallback(() => {
+    try {
+      tapPlayer.seekTo(0);
+      tapPlayer.play();
+    } catch {}
+  }, [tapPlayer]);
+
+  const playCorrect = useCallback(() => {
+    try {
+      correctPlayer.seekTo(0);
+      correctPlayer.play();
+    } catch {}
+  }, [correctPlayer]);
+
+  const playWrong = useCallback(() => {
+    try {
+      wrongPlayer.seekTo(0);
+      wrongPlayer.play();
+    } catch {}
+  }, [wrongPlayer]);
+
+  return { playTap, playCorrect, playWrong };
+}
 
 function NumberButton({ num, onPress, disabled }: { num: number; onPress: () => void; disabled: boolean }) {
   const scale = useSharedValue(1);
@@ -63,6 +99,7 @@ export default function GameScreen() {
 
   const colors = useColors();
   const { dispatch } = useGame();
+  const { playTap, playCorrect, playWrong } = useSoundEffects();
 
   const totalQ = isChallenge ? CHALLENGE_QUESTIONS : TOTAL_QUESTIONS;
   const [questions] = useState<Question[]>(() => generateQuestions(dan, totalQ));
@@ -73,8 +110,7 @@ export default function GameScreen() {
   const [timeLeft, setTimeLeft] = useState(CHALLENGE_TIME);
   const [isFinished, setIsFinished] = useState(false);
 
-  // Animation values
-  const questionScale = useSharedValue(1);
+  // Animation values（揺れなし：フィードバックのみ）
   const feedbackOpacity = useSharedValue(0);
   const feedbackScale = useSharedValue(0.5);
   const progressWidth = useSharedValue(0);
@@ -139,19 +175,20 @@ export default function GameScreen() {
 
   const handleNumberPress = (num: number) => {
     if (feedback !== null || isFinished) return;
+    // タップ音を再生
+    playTap();
+
     const newDigits = [...inputDigits, num];
     setInputDigits(newDigits);
 
     const currentAnswer = parseInt(newDigits.join(""), 10);
-    const maxPossible = currentQuestion.a * 9; // max answer for this dan
 
     // Auto-submit if we have enough digits or answer is clearly complete
     const digitCount = newDigits.length;
-    const isDefinitelyWrong = currentAnswer > 81; // max 9x9=81
     const isComplete =
       digitCount >= 2 ||
       (digitCount === 1 && currentAnswer > 9) ||
-      isDefinitelyWrong;
+      currentAnswer > 81;
 
     if (isComplete || currentAnswer === currentQuestion.answer) {
       submitAnswer(currentAnswer, newDigits);
@@ -160,28 +197,28 @@ export default function GameScreen() {
 
   const handleDelete = () => {
     if (feedback !== null) return;
+    playTap();
     setInputDigits((prev) => prev.slice(0, -1));
   };
 
   const submitAnswer = (answer: number, digits: number[]) => {
     const isCorrect = answer === currentQuestion.answer;
 
-    // Animate question
-    questionScale.value = withSequence(
-      withTiming(isCorrect ? 1.1 : 0.9, { duration: 100 }),
-      withSpring(1, { damping: 8 })
-    );
-
-    // Feedback animation
+    // フィードバックアニメーション（揺れなし）
     feedbackOpacity.value = withTiming(1, { duration: 150 });
     feedbackScale.value = withSpring(1, { damping: 8 });
 
     setFeedback(isCorrect ? "correct" : "wrong");
 
-    if (Platform.OS !== "web") {
-      if (isCorrect) {
+    // 効果音とハプティクス
+    if (isCorrect) {
+      playCorrect();
+      if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
+      }
+    } else {
+      playWrong();
+      if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     }
@@ -217,10 +254,6 @@ export default function GameScreen() {
   const feedbackAnimStyle = useAnimatedStyle(() => ({
     opacity: feedbackOpacity.value,
     transform: [{ scale: feedbackScale.value }],
-  }));
-
-  const questionAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: questionScale.value }],
   }));
 
   const progressAnimStyle = useAnimatedStyle(() => ({
@@ -261,7 +294,8 @@ export default function GameScreen() {
 
       {/* Question Area */}
       <View style={styles.questionArea}>
-        <Animated.View style={[styles.questionCard, { backgroundColor: colors.surface, borderColor: colors.border }, questionAnimStyle]}>
+        {/* 揺れなし：静止したカード */}
+        <View style={[styles.questionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.questionText, { color: colors.foreground }]}>
             {currentQuestion.a} × {currentQuestion.b} = ?
           </Text>
@@ -270,7 +304,7 @@ export default function GameScreen() {
               {inputValue || "　"}
             </Text>
           </View>
-        </Animated.View>
+        </View>
 
         {/* Feedback overlay */}
         <Animated.View style={[styles.feedbackOverlay, feedbackAnimStyle]}>
@@ -309,7 +343,12 @@ export default function GameScreen() {
           disabled={feedback !== null}
         />
         <Pressable
-          onPress={() => inputDigits.length > 0 && submitAnswer(parseInt(inputValue, 10), inputDigits)}
+          onPress={() => {
+            if (inputDigits.length > 0 && feedback === null) {
+              playTap();
+              submitAnswer(parseInt(inputValue, 10), inputDigits);
+            }
+          }}
           style={({ pressed }) => [
             styles.numBtnWrapper,
             styles.numButton,
