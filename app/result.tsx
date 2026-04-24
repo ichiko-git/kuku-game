@@ -5,10 +5,8 @@ import * as Haptics from "expo-haptics";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
   withDelay,
-  withSequence,
 } from "react-native-reanimated";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -19,26 +17,20 @@ function StarDisplay({ stars, total = 3 }: { stars: number; total?: number }) {
   return (
     <View style={styles.starDisplay}>
       {Array.from({ length: total }).map((_, i) => {
-        const delay = i * 150;
-        const scale = useSharedValue(0);
-        const rotate = useSharedValue(-30);
+        const delay = i * 120;
+        const opacity = useSharedValue(0);
 
         useEffect(() => {
-          if (i < stars) {
-            scale.value = withDelay(delay, withSpring(1, { damping: 6 }));
-            rotate.value = withDelay(delay, withSpring(0, { damping: 8 }));
-          } else {
-            scale.value = withDelay(delay, withTiming(0.7, { duration: 300 }));
-          }
+          opacity.value = withDelay(delay, withTiming(1, { duration: 250 }));
         }, []);
 
         const animStyle = useAnimatedStyle(() => ({
-          transform: [{ scale: scale.value }, { rotate: `${rotate.value}deg` }],
-          opacity: i < stars ? 1 : 0.25,
+          opacity: opacity.value,
+          // 揺れなし：星は静止表示、獲得していない星は薄く
         }));
 
         return (
-          <Animated.Text key={i} style={[styles.starEmoji, animStyle]}>
+          <Animated.Text key={i} style={[styles.starEmoji, animStyle, { opacity: i < stars ? 1 : 0.25 }]}>
             ⭐
           </Animated.Text>
         );
@@ -78,13 +70,11 @@ export default function ResultScreen() {
   const wrongRecords = records.filter((r) => !r.isCorrect);
   const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
 
-  // Entrance animation
-  const cardScale = useSharedValue(0.8);
+  // 揺れなし：シンプルなフェードイン
   const cardOpacity = useSharedValue(0);
 
   useEffect(() => {
-    cardScale.value = withSpring(1, { damping: 10 });
-    cardOpacity.value = withTiming(1, { duration: 400 });
+    cardOpacity.value = withTiming(1, { duration: 350 });
 
     if (Platform.OS !== "web") {
       if (stars >= 3) {
@@ -96,7 +86,6 @@ export default function ResultScreen() {
   }, []);
 
   const cardAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: cardScale.value }],
     opacity: cardOpacity.value,
   }));
 

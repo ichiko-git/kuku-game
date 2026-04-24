@@ -34,24 +34,15 @@ function useSoundEffects() {
   }, []);
 
   const playTap = useCallback(() => {
-    try {
-      tapPlayer.seekTo(0);
-      tapPlayer.play();
-    } catch {}
+    try { tapPlayer.seekTo(0); tapPlayer.play(); } catch {}
   }, [tapPlayer]);
 
   const playCorrect = useCallback(() => {
-    try {
-      correctPlayer.seekTo(0);
-      correctPlayer.play();
-    } catch {}
+    try { correctPlayer.seekTo(0); correctPlayer.play(); } catch {}
   }, [correctPlayer]);
 
   const playWrong = useCallback(() => {
-    try {
-      wrongPlayer.seekTo(0);
-      wrongPlayer.play();
-    } catch {}
+    try { wrongPlayer.seekTo(0); wrongPlayer.play(); } catch {}
   }, [wrongPlayer]);
 
   return { playTap, playCorrect, playWrong };
@@ -109,15 +100,16 @@ export default function GameScreen() {
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
   // feedbackType: 最後に表示したフィードバックの種別（フェードアウト中も保持）
   const [feedbackType, setFeedbackType] = useState<"correct" | "wrong">("correct");
-  const [records, setRecords] = useState<QuestionRecord[]>([]);
   const [timeLeft, setTimeLeft] = useState(CHALLENGE_TIME);
-  const [isFinished, setIsFinished] = useState(false);
-  // 二重送信防止フラグ（feedbackとは別に管理）
-  const isSubmittingRef = useRef(false);
-  // フィードバック種別をrefで保持（フェードアウト中も正しい値を保つ）
-  const feedbackTypeRef = useRef<"correct" | "wrong">("correct");
 
-  // Animation values（揺れなし：フィードバックのみ）
+  // stale closure 対策：最新の値をrefで保持
+  const recordsRef = useRef<QuestionRecord[]>([]);
+  const currentIdxRef = useRef(0);
+  const isSubmittingRef = useRef(false);
+  const isNavigatingRef = useRef(false);
+  const timeLeftRef = useRef(CHALLENGE_TIME);
+
+  // Animation values
   const feedbackOpacity = useSharedValue(0);
   const feedbackScale = useSharedValue(0.5);
   const progressWidth = useSharedValue(0);
@@ -126,41 +118,49 @@ export default function GameScreen() {
 
   // Timer for challenge mode
   useEffect(() => {
-    if (!isChallenge || isFinished) return;
+    if (!isChallenge) return;
     timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
-        if (t <= 1) {
+        const next = t - 1;
+        timeLeftRef.current = next;
+        if (next <= 0) {
           clearInterval(timerRef.current!);
-          finishGame();
+          navigateToResult();
           return 0;
         }
-        return t - 1;
+        return next;
       });
     }, 1000);
     return () => clearInterval(timerRef.current!);
-  }, [isChallenge, isFinished]);
-
-  const finishGame = useCallback(() => {
-    setIsFinished(true);
-  }, []);
+  }, [isChallenge]);
 
   // Update progress bar
   useEffect(() => {
     progressWidth.value = withTiming((currentIdx / totalQ) * 100, { duration: 300 });
   }, [currentIdx]);
 
-  // Navigate to result when finished
+  // refとstateを同期
   useEffect(() => {
-    if (!isFinished) return;
-    const correct = records.filter((r) => r.isCorrect).length;
-    const stars = calcStars(correct, records.length || 1);
-    const timeBonus = isChallenge ? timeLeft * 5 : 0;
-    const score = calcScore(correct, records.length || 1, timeBonus);
+    currentIdxRef.current = currentIdx;
+  }, [currentIdx]);
+
+  // 結果画面へ遷移（最新のrefを使うため stale closure なし）
+  const navigateToResult = useCallback(() => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+
+    clearInterval(timerRef.current!);
+
+    const latestRecords = recordsRef.current;
+    const correct = latestRecords.filter((r) => r.isCorrect).length;
+    const stars = calcStars(correct, latestRecords.length || 1);
+    const timeBonus = isChallenge ? timeLeftRef.current * 5 : 0;
+    const score = calcScore(correct, latestRecords.length || 1, timeBonus);
 
     if (dan === 0 || isChallenge) {
-      dispatch({ type: "SAVE_CHALLENGE", score, correct, total: records.length });
+      dispatch({ type: "SAVE_CHALLENGE", score, correct, total: latestRecords.length });
     } else {
-      dispatch({ type: "SAVE_RESULT", dan, score, stars, correct, total: records.length });
+      dispatch({ type: "SAVE_RESULT", dan, score, stars, correct, total: latestRecords.length });
     }
 
     router.replace({
@@ -168,65 +168,54 @@ export default function GameScreen() {
       params: {
         score: String(score),
         correct: String(correct),
-        total: String(records.length),
+        total: String(latestRecords.length),
         stars: String(stars),
         dan: String(dan),
         mode,
-        records: JSON.stringify(records),
+        records: JSON.stringify(latestRecords),
       },
     });
-  }, [isFinished]);
+  }, [dan, mode, isChallenge, dispatch, router]);
 
-  const currentQuestion = questions[currentIdx];
+  const currentQuestion = questions[currentIdxRef.current] ?? questions[currentIdx];
   const inputValue = inputDigits.length === 0 ? "" : inputDigits.join("");
 
   const handleNumberPress = (num: number) => {
-    // isSubmittingRefで二重送信を防ぐ（feedbackのstale closureに依存しない）
-    if (isSubmittingRef.current || isFinished) return;
-    // タップ音を再生
+    if (isSubmittingRef.current) return;
     playTap();
 
     const newDigits = [...inputDigits, num];
     setInputDigits(newDigits);
 
     const currentAnswer = parseInt(newDigits.join(""), 10);
+    const q = questions[currentIdxRef.current];
+    if (!q) return;
 
-    // 正解の桁数を計算して自動送信タイミングを決定
-    const correctAnswer = currentQuestion.answer;
-    const correctDigitCount = String(correctAnswer).length;
-    const digitCount = newDigits.length;
-
-    // 入力桁数が正解の桁数に達したら自動送信
-    // （1桁答えなら1桁入力で即送信、2桁答えなら2桁入力で送信）
-    const isComplete = digitCount >= correctDigitCount;
-
-    if (isComplete) {
-      submitAnswer(currentAnswer, newDigits);
+    const correctDigitCount = String(q.answer).length;
+    if (newDigits.length >= correctDigitCount) {
+      submitAnswer(currentAnswer, q);
     }
   };
 
   const handleDelete = () => {
-    if (feedback !== null) return;
+    if (isSubmittingRef.current) return;
     playTap();
     setInputDigits((prev) => prev.slice(0, -1));
   };
 
-  const submitAnswer = (answer: number, digits: number[]) => {
-    // 二重送信防止
+  const submitAnswer = (answer: number, q: Question) => {
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
 
-    const isCorrect = answer === currentQuestion.answer;
+    const isCorrect = answer === q.answer;
 
-    // feedbackTypeを先に確定（フェードアウト中も種別が変わらない）
+    // feedbackTypeを先に確定
     const feedbackKind: "correct" | "wrong" = isCorrect ? "correct" : "wrong";
-    feedbackTypeRef.current = feedbackKind;
     setFeedbackType(feedbackKind);
 
-    // フィードバックアニメーション（揺れなし）
+    // フィードバックアニメーション
     feedbackOpacity.value = withTiming(1, { duration: 150 });
     feedbackScale.value = withSpring(1, { damping: 8 });
-
     setFeedback(feedbackKind);
 
     // 効果音とハプティクス
@@ -243,16 +232,16 @@ export default function GameScreen() {
     }
 
     const record: QuestionRecord = {
-      question: `${currentQuestion.a} × ${currentQuestion.b}`,
-      a: currentQuestion.a,
-      b: currentQuestion.b,
-      correct: currentQuestion.answer,
+      question: `${q.a} × ${q.b}`,
+      a: q.a,
+      b: q.b,
+      correct: q.answer,
       userAnswer: answer,
       isCorrect,
     };
 
-    const newRecords = [...records, record];
-    setRecords(newRecords);
+    // refに即時追加（stale closure対策）
+    recordsRef.current = [...recordsRef.current, record];
 
     // Move to next after delay
     setTimeout(() => {
@@ -260,12 +249,14 @@ export default function GameScreen() {
       feedbackScale.value = withTiming(0.5, { duration: 200 });
       setFeedback(null);
       setInputDigits([]);
-      isSubmittingRef.current = false; // フラグをリセット
+      isSubmittingRef.current = false;
 
-      const nextIdx = currentIdx + 1;
+      const nextIdx = currentIdxRef.current + 1;
       if (nextIdx >= totalQ) {
-        setIsFinished(true);
+        // 全問完了 → 結果画面へ
+        navigateToResult();
       } else {
+        currentIdxRef.current = nextIdx;
         setCurrentIdx(nextIdx);
       }
     }, 900);
@@ -314,7 +305,6 @@ export default function GameScreen() {
 
       {/* Question Area */}
       <View style={styles.questionArea}>
-        {/* 揺れなし：静止したカード */}
         <View style={[styles.questionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.questionText, { color: colors.foreground }]}>
             {currentQuestion.a} × {currentQuestion.b} = ?
@@ -364,9 +354,12 @@ export default function GameScreen() {
         />
         <Pressable
           onPress={() => {
-            if (inputDigits.length > 0 && !isSubmittingRef.current && !isFinished) {
-              playTap();
-              submitAnswer(parseInt(inputValue, 10), inputDigits);
+            if (inputDigits.length > 0 && !isSubmittingRef.current) {
+              const q = questions[currentIdxRef.current];
+              if (q) {
+                playTap();
+                submitAnswer(parseInt(inputValue, 10), q);
+              }
             }
           }}
           style={({ pressed }) => [
