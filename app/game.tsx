@@ -109,6 +109,8 @@ export default function GameScreen() {
   const [records, setRecords] = useState<QuestionRecord[]>([]);
   const [timeLeft, setTimeLeft] = useState(CHALLENGE_TIME);
   const [isFinished, setIsFinished] = useState(false);
+  // 二重送信防止フラグ（feedbackとは別に管理）
+  const isSubmittingRef = useRef(false);
 
   // Animation values（揺れなし：フィードバックのみ）
   const feedbackOpacity = useSharedValue(0);
@@ -174,7 +176,8 @@ export default function GameScreen() {
   const inputValue = inputDigits.length === 0 ? "" : inputDigits.join("");
 
   const handleNumberPress = (num: number) => {
-    if (feedback !== null || isFinished) return;
+    // isSubmittingRefで二重送信を防ぐ（feedbackのstale closureに依存しない）
+    if (isSubmittingRef.current || isFinished) return;
     // タップ音を再生
     playTap();
 
@@ -183,14 +186,16 @@ export default function GameScreen() {
 
     const currentAnswer = parseInt(newDigits.join(""), 10);
 
-    // Auto-submit if we have enough digits or answer is clearly complete
+    // 正解の桁数を計算して自動送信タイミングを決定
+    const correctAnswer = currentQuestion.answer;
+    const correctDigitCount = String(correctAnswer).length;
     const digitCount = newDigits.length;
-    const isComplete =
-      digitCount >= 2 ||
-      (digitCount === 1 && currentAnswer > 9) ||
-      currentAnswer > 81;
 
-    if (isComplete || currentAnswer === currentQuestion.answer) {
+    // 入力桁数が正解の桁数に達したら自動送信
+    // （1桁答えなら1桁入力で即送信、2桁答えなら2桁入力で送信）
+    const isComplete = digitCount >= correctDigitCount;
+
+    if (isComplete) {
       submitAnswer(currentAnswer, newDigits);
     }
   };
@@ -202,6 +207,10 @@ export default function GameScreen() {
   };
 
   const submitAnswer = (answer: number, digits: number[]) => {
+    // 二重送信防止
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+
     const isCorrect = answer === currentQuestion.answer;
 
     // フィードバックアニメーション（揺れなし）
@@ -241,6 +250,7 @@ export default function GameScreen() {
       feedbackScale.value = withTiming(0.5, { duration: 200 });
       setFeedback(null);
       setInputDigits([]);
+      isSubmittingRef.current = false; // フラグをリセット
 
       const nextIdx = currentIdx + 1;
       if (nextIdx >= totalQ) {
@@ -326,7 +336,7 @@ export default function GameScreen() {
             key={num}
             num={num}
             onPress={() => handleNumberPress(num)}
-            disabled={feedback !== null}
+            disabled={isSubmittingRef.current}
           />
         ))}
         <View style={styles.numBtnWrapper}>
@@ -340,11 +350,11 @@ export default function GameScreen() {
         <NumberButton
           num={0}
           onPress={() => handleNumberPress(0)}
-          disabled={feedback !== null}
+          disabled={isSubmittingRef.current}
         />
         <Pressable
           onPress={() => {
-            if (inputDigits.length > 0 && feedback === null) {
+            if (inputDigits.length > 0 && !isSubmittingRef.current && !isFinished) {
               playTap();
               submitAnswer(parseInt(inputValue, 10), inputDigits);
             }
@@ -353,7 +363,7 @@ export default function GameScreen() {
             styles.numBtnWrapper,
             styles.numButton,
             styles.enterButton,
-            { opacity: inputDigits.length === 0 || feedback !== null ? 0.4 : pressed ? 0.8 : 1 },
+            { opacity: inputDigits.length === 0 || isSubmittingRef.current ? 0.4 : pressed ? 0.8 : 1 },
           ]}
         >
           <Text style={styles.enterButtonText}>OK</Text>
