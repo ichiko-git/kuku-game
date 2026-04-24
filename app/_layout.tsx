@@ -87,8 +87,15 @@ export default function RootLayout() {
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
           <GameProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                // 画面遷移中の白画面フラッシュを防ぐため、コンテンツ背景色を指定する
+                contentStyle: { backgroundColor: '#FFF9F0' },
+                animation: "fade",
+              }}
+            >
+              <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
               <Stack.Screen name="oauth/callback" />
               <Stack.Screen name="select-dan" />
               <Stack.Screen name="game" />
